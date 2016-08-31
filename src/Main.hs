@@ -93,6 +93,24 @@ makeBars csvString =
         volume = volumes
     }
 
+-- Name : calculateDelta
+-- Input : (Float, Float)
+-- Output : Float
+-- Uses :
+calculateDelta :: (Float, Float) -> Float
+calculateDelta fluple = (snd fluple - fst fluple) / fst fluple
+
+-- Name : deltafy
+-- Input : Series
+-- Output : Series
+-- Uses : calculateDelta, map, nseries, zip
+deltafy :: Series -> Series
+deltafy series =
+    let unzippedSeries = nseries series
+        zippedSeries = zip (0:unzippedSeries) unzippedSeries
+        deltas = map calculateDelta zippedSeries
+    in NumberSeries { nseries = deltas }
+
 -- main
 main :: IO()
 main = do
@@ -100,5 +118,7 @@ main = do
     csvString <- readCsv "./data/msft.csv"
 
     let bars = makeBars csvString
-    print(bars)
+
+    let deltas = deltafy (adjclose bars)
+    print(deltas)
 
