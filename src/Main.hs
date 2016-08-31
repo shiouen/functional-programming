@@ -7,6 +7,8 @@ import qualified Data.Time.Calendar as T (Day(..), fromGregorian)
 
 type FileName = String
 type CSVString = String
+type WindowSize = Int
+type BinSize = Int
 
 data Series = TimeSeries { tseries :: [T.Day] } | NumberSeries { nseries :: [Float] }
     deriving Show
@@ -111,6 +113,34 @@ deltafy series =
         deltas = map calculateDelta zippedSeries
     in NumberSeries { nseries = deltas }
 
+-- Name : makeWindow
+-- Input : Int -> WindowSize -> Series
+-- Output : [Float]
+-- Uses : drop, start, take
+makeWindow :: Int -> WindowSize -> Series -> [Float]
+makeWindow start ws (NumberSeries series) =
+    let withoutStart = drop start series
+    in take ws withoutStart
+
+-- Name : makeBin
+-- Input : BinSize -> [Float]
+-- Output : [Float]
+-- Uses : fromIntegral, maximum, minimum
+makeBin :: BinSize -> [Float] -> [Float]
+makeBin binSize window =
+    let min = minimum window
+        max = maximum window
+        step = (max - min) / fromIntegral (binSize - 1)
+    in [ min + (step * fromIntegral x) | x <- [ 0 .. binSize - 1 ]]
+
+-- Name : calculateBins
+-- Input : Series -> WindowSize -> BinSize
+-- Output : [[Float]]
+calculateBins :: Series -> WindowSize -> BinSize -> [[Float]]
+calculateBins (NumberSeries deltas) windowSize binSize =
+    let range = [ 1 .. (length deltas) - windowSize]
+    in [ makeBin binSize (makeWindow index windowSize (NumberSeries deltas)) | index <- range ]
+
 -- main
 main :: IO()
 main = do
@@ -118,7 +148,10 @@ main = do
     csvString <- readCsv "./data/msft.csv"
 
     let bars = makeBars csvString
+    print("bars", bars)
 
     let deltas = deltafy (adjclose bars)
-    print(deltas)
+    print("bars adjclose deltas", deltas)
 
+    let bins = calculateBins deltas 10 10
+    print(bins)
