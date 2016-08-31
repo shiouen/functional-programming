@@ -1,8 +1,9 @@
 module Main where
 
 import System.IO
-import Data.List (sort, transpose)
+import Data.List (elemIndex, sort, transpose)
 import Data.List.Split (splitOn)
+import Data.Maybe (fromJust)
 import qualified Data.Time.Calendar as T (Day(..), fromGregorian)
 
 type FileName = String
@@ -141,6 +142,14 @@ calculateBins (NumberSeries deltas) windowSize binSize =
     let range = [ 1 .. (length deltas) - windowSize]
     in [ makeBin binSize (makeWindow index windowSize (NumberSeries deltas)) | index <- range ]
 
+-- Name : whichMax
+-- Input : [Float]
+-- Output : Int
+whichMax :: [Float] -> Int
+whichMax probabilities =
+    let maximumProbability = (reverse $ sort probabilities) !! 0
+    in fromJust (elemIndex maximumProbability probabilities)
+
 -- main
 main :: IO()
 main = do
@@ -155,3 +164,6 @@ main = do
 
     let bins = calculateBins deltas 10 10
     print(bins)
+
+    let probs = [1.33, 1.4341, 2.3, 123.12, 1.0, 300.0 ]
+    print(whichMax probs)
