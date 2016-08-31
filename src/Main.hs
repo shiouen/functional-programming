@@ -5,6 +5,8 @@ import Data.List (elemIndex, sort, transpose)
 import Data.List.Split (splitOn)
 import Data.Maybe (fromJust)
 import qualified Data.Time.Calendar as T (Day(..), fromGregorian)
+import Debug.Trace
+import Text.PrettyPrint.Boxes
 
 type FileName = String
 type CSVString = String
@@ -162,16 +164,12 @@ calculatePosteriors delta bins priors =
         posteriorSum = sum posteriors
     in [ p / posteriorSum | p <- posteriors ]
 
--- Name : calculateAllPosteriors
--- Input : Series -> [[Float]] -> [Float]
--- Output : [[Float]]
--- Uses :
 calculateAllPosteriors :: Series -> [[Float]] -> [Float] -> [[Float]]
 calculateAllPosteriors (NumberSeries []) _ _ = [[]]
 calculateAllPosteriors _ [] _ = [[]]
-calculateAllPosteriors (NumberSeries (d:ds)) (b:bins) priors =
-    let posteriors = calculatePosteriors d b priors
-    in [posteriors] ++ calculateAllPosteriors (NumberSeries ds) bins priors
+calculateAllPosteriors (NumberSeries (delta:deltas)) (bin:bins) probs =
+    let posteriors = calculatePosteriors delta bin probs
+    in [posteriors] ++ calculateAllPosteriors (NumberSeries deltas) bins posteriors
 
 -- Name : whichMax
 -- Input : [Float]
@@ -185,7 +183,7 @@ whichMax probabilities =
 -- Name : bestBins
 -- Input : [[Float]] -> [[Float]]
 -- Output : [Float]
--- Uses :
+-- Uses : bestBins, whichMax
 bestBins :: [[Float]] -> [[Float]] -> [Float]
 bestBins [] _ = []
 bestBins _ [] = []
@@ -196,6 +194,38 @@ bestBins bins probabilities =
     where (b:bs) = bins
           (p:ps) = probabilities
 
+-- Name : calculatePrediction
+-- Input : Float -> Float
+-- Output : Float
+-- Uses :
+calculatePrediction :: Float -> Float -> Float
+calculatePrediction serie bestBin = serie + bestBin * serie
+
+-- Name : calculatePredictions
+-- Input : Series -> WindowSize -> [Float]
+-- Output : Series
+-- Uses : calculatePrediction, drop, take, zip
+calculatePredictions :: Series -> WindowSize -> [Float] -> Series
+calculatePredictions (NumberSeries series) ws bestBins =
+    let seriesBeforeWindow = take (ws + 1) series
+        seriesAfterWindow = drop (ws + 1) series
+        zippedSeries = zip seriesAfterWindow bestBins
+        predictions = [ calculatePrediction serie bin | (serie, bin) <- zippedSeries ]
+    in NumberSeries (seriesBeforeWindow ++ predictions)
+
+-- Name : computeMape
+-- Input : Series -> Series
+-- Output : Float
+-- Uses : abs, fromIntegral, sum, zip
+computeMAPE :: Series -> Series -> Float
+computeMAPE (NumberSeries original) (NumberSeries predicted) =
+    let calcs = [ (abs (x - y)) / x | (x, y) <- zip original predicted ]
+        originalAmount = fromIntegral (length original) :: Float
+        meanAbsoluteError = (sum calcs) / originalAmount
+    in meanAbsoluteError * 100
+
+print_table :: [[String]] -> IO ()
+print_table rows = printBox $ hsep 2 left (map (vcat left . map text) (transpose rows))
 
 -- main
 main :: IO()
@@ -204,13 +234,30 @@ main = do
     csvString <- readCsv "./data/msft.csv"
 
     let bars = makeBars csvString
-    print("bars", bars)
+    print ("bars", bars)
+    putStrLn "|-----|"
 
     let deltas = deltafy (adjclose bars)
-    print("bars adjclose deltas", deltas)
+    print ("bars adjclose deltas", deltas)
+    putStrLn "|-----|"
 
     let bins = calculateBins deltas 10 10
-    print(bins)
+    print_table $ map (map show) bins
+    putStrLn "|-----|"
 
-    let probs = [ 1.33, 1.4341, 2.3, 123.12, 1.0, 300.0 ]
-    print(whichMax probs)
+    let priors = replicate 10 0.1
+    let posteriors = calculateAllPosteriors (NumberSeries $ drop 10 $ nseries deltas) bins priors
+    print_table $ map (map show) posteriors
+    putStrLn "|-----|"
+
+    let bb = bestBins bins posteriors
+    print ("best bins", bb)
+    putStrLn "|-----|"
+
+    let predictions = calculatePredictions (adjclose bars) 10 bb
+    print ("predictions", predictions)
+    putStrLn "|-----|"
+
+    let mape = computeMAPE (adjclose bars) predictions
+    print ("mape", mape)
+    putStrLn "|-----|"
