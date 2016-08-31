@@ -11,7 +11,8 @@ type CSVString = String
 type WindowSize = Int
 type BinSize = Int
 
-data Series = TimeSeries { tseries :: [T.Day] } | NumberSeries { nseries :: [Float] }
+data Series = TimeSeries { tseries :: [T.Day] }
+    | NumberSeries { nseries :: [Float] }
     deriving Show
 
 data Bars = Bars {
@@ -137,18 +138,64 @@ makeBin binSize window =
 -- Name : calculateBins
 -- Input : Series -> WindowSize -> BinSize
 -- Output : [[Float]]
+-- Uses : length
 calculateBins :: Series -> WindowSize -> BinSize -> [[Float]]
 calculateBins (NumberSeries deltas) windowSize binSize =
     let range = [ 1 .. (length deltas) - windowSize]
     in [ makeBin binSize (makeWindow index windowSize (NumberSeries deltas)) | index <- range ]
 
+-- Name : calculatePosterior
+-- Input : Float -> Float -> Float
+-- Output: Float
+-- Uses : abs
+calculatePosterior :: Float -> Float -> Float -> Float
+calculatePosterior delta bin prior = (1 - abs (delta - bin)) * prior
+
+-- Name : calculatePosteriors
+-- Input : Float -> [Float] -> [Float]
+-- Output : [Float]
+-- Uses :
+calculatePosteriors :: Float -> [Float] -> [Float] -> [Float]
+calculatePosteriors delta bins priors =
+    let binsAndPriors = zip bins priors
+        posteriors = [ calculatePosterior delta bin prior | (bin, prior) <- binsAndPriors ]
+        posteriorSum = sum posteriors
+    in [ p / posteriorSum | p <- posteriors ]
+
+-- Name : calculateAllPosteriors
+-- Input : Series -> [[Float]] -> [Float]
+-- Output : [[Float]]
+-- Uses :
+calculateAllPosteriors :: Series -> [[Float]] -> [Float] -> [[Float]]
+calculateAllPosteriors (NumberSeries []) _ _ = [[]]
+calculateAllPosteriors _ [] _ = [[]]
+calculateAllPosteriors (NumberSeries (d:ds)) (b:bins) priors =
+    let posteriors = calculatePosteriors d b priors
+    in [posteriors] ++ calculateAllPosteriors (NumberSeries ds) bins priors
+
 -- Name : whichMax
 -- Input : [Float]
 -- Output : Int
+-- Uses : elemIndex, fromJust, reverse, sort
 whichMax :: [Float] -> Int
 whichMax probabilities =
     let maximumProbability = (reverse $ sort probabilities) !! 0
     in fromJust (elemIndex maximumProbability probabilities)
+
+-- Name : bestBins
+-- Input : [[Float]] -> [[Float]]
+-- Output : [Float]
+-- Uses :
+bestBins :: [[Float]] -> [[Float]] -> [Float]
+bestBins [] _ = []
+bestBins _ [] = []
+bestBins bins probabilities =
+    let index = whichMax p
+        bestBin = b !! index
+    in [bestBin] ++ bestBins bs ps
+    where (b:bs) = bins
+          (p:ps) = probabilities
+
 
 -- main
 main :: IO()
@@ -165,5 +212,5 @@ main = do
     let bins = calculateBins deltas 10 10
     print(bins)
 
-    let probs = [1.33, 1.4341, 2.3, 123.12, 1.0, 300.0 ]
+    let probs = [ 1.33, 1.4341, 2.3, 123.12, 1.0, 300.0 ]
     print(whichMax probs)
